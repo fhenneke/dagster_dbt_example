@@ -8,6 +8,13 @@ from dagster_dbt import DbtCliResource, dbt_assets, DagsterDbtTranslator
 from dagster_and_dbt.partitions import daily_partition, weekly_partition
 from dagster_and_dbt.project import dbt_project
 
+condition = (
+    dg.AutomationCondition.eager().without(
+        dg.AutomationCondition.in_latest_time_window()
+    )
+    & dg.AutomationCondition.all_deps_blocking_checks_passed()
+)
+
 
 class CustomizedDagsterDbtTranslator(DagsterDbtTranslator):
     def get_asset_key(self, dbt_resource_props) -> dg.AssetKey:
@@ -20,7 +27,7 @@ class CustomizedDagsterDbtTranslator(DagsterDbtTranslator):
         return super().get_asset_key(dbt_resource_props)
 
     def get_automation_condition(self, dbt_resource_props):
-        return dg.AutomationCondition.eager()
+        return condition
 
 
 ## dagster pre-processing
@@ -130,7 +137,7 @@ def dbt_weekly_models(
 @dg.asset(
     deps=[dg.AssetKey("mart_daily_data")],
     partitions_def=daily_partition,
-    automation_condition=dg.AutomationCondition.eager(),
+    automation_condition=condition,
 )
 def post_processing_daily(): ...
 
@@ -138,6 +145,6 @@ def post_processing_daily(): ...
 @dg.asset(
     deps=[dg.AssetKey("mart_weekly_data")],
     partitions_def=weekly_partition,
-    automation_condition=dg.AutomationCondition.eager(),
+    automation_condition=condition,
 )
 def post_processing_weekly(): ...
