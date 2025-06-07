@@ -11,19 +11,21 @@ from dagster_and_dbt.partitions import daily_partition, weekly_partition
     partitions_def=daily_partition
 )
 def pre_processing_daily(context: dg.AssetExecutionContext, database: DuckDBResource):
-    partition_date_str = context.partition_key
-    context.log.info(f"partition_date_str: {partition_date_str}")
+    partition_key = context.partition_key
+    time_partition = partition_key.keys_by_dimension["time"]
+    static_partition = partition_key.keys_by_dimension["static"]
+    context.log.info(f"time_partition: {time_partition}, static_partition: {static_partition}")
 
     query = f"""
         create table if not exists daily_raw_data (
-            partition_date varchar, value integer
+            partition_date varchar, static_partition varchar, value integer
         );
 
-        delete from daily_raw_data where partition_date = '{partition_date_str}';
+        delete from daily_raw_data where partition_date = '{time_partition}' and static_partition = '{static_partition}';
     
         insert into daily_raw_data
         select
-            '{partition_date_str}', {datetime.fromisoformat(partition_date_str).timestamp()};
+            '{time_partition}', '{static_partition}', {datetime.fromisoformat(time_partition).timestamp()};
     """
 
     context.log.info(f"query:\n{query}")
@@ -34,18 +36,20 @@ def pre_processing_daily(context: dg.AssetExecutionContext, database: DuckDBReso
     partitions_def=weekly_partition
 )
 def pre_processing_weekly(context: dg.AssetExecutionContext, database: DuckDBResource):
-    partition_week_str = context.partition_key
+    partition_key = context.partition_key
+    time_partition = partition_key.keys_by_dimension["time"]
+    static_partition = partition_key.keys_by_dimension["static"]
 
     query = f"""
         create table if not exists weekly_raw_data (
-            partition_date varchar, value integer
+            partition_date varchar, static_partition varchar, value integer
         );
 
-        delete from weekly_raw_data where partition_date = '{partition_week_str}';
+        delete from weekly_raw_data where partition_date = '{time_partition}' and static_partition = '{static_partition}';
     
         insert into weekly_raw_data
         select
-            '{partition_week_str}', {datetime.fromisoformat(partition_week_str).timestamp()};
+            '{time_partition}', '{static_partition}', {datetime.fromisoformat(time_partition).timestamp()};
     """
 
     context.log.info(f"query:\n{query}")
