@@ -88,7 +88,7 @@ def weekly_raw_data(context: dg.AssetExecutionContext, database: DuckDBResource)
 ## dbt
 @dbt_assets(
     manifest=dbt_project.manifest_path,
-    select="stg_daily_raw_data mart_daily_data",
+    select="tag:daily",
     partitions_def=daily_partition,
     dagster_dbt_translator=CustomizedDagsterDbtTranslator(),
 )
@@ -108,7 +108,7 @@ def dbt_daily_models(
 
 @dbt_assets(
     manifest=dbt_project.manifest_path,
-    select="stg_weekly_raw_data mart_weekly_data",
+    select="tag:weekly",
     partitions_def=weekly_partition,
     dagster_dbt_translator=CustomizedDagsterDbtTranslator(),
 )

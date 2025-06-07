@@ -1,9 +1,15 @@
+{{ config(materialized='incremental', unique_key=['partition_date', 'static_partition'], tags=['weekly']) }}
+
 with daily_aggregated as (
     select
         static_partition,
         date_trunc('week', start_time::timestamp) as week_start,
         sum(value) as daily_sum
     from {{ ref('stg_daily_raw_data') }}
+    {% if is_incremental() %}
+    where start_time >= '{{ var("start_time") }}' 
+    and start_time < '{{ var("end_time") }}'
+    {% endif %}
     group by static_partition, date_trunc('week', start_time::timestamp)
 ),
 
@@ -15,6 +21,10 @@ weekly_data as (
         end_time,
         value as weekly_value
     from {{ ref('stg_weekly_raw_data') }}
+    {% if is_incremental() %}
+    where start_time >= '{{ var("start_time") }}' 
+    and start_time < '{{ var("end_time") }}'
+    {% endif %}
 )
 
 select

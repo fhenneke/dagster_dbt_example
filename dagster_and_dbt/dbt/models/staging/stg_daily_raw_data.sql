@@ -1,4 +1,4 @@
-{{ config(materialized='incremental', unique_key=['partition_date', 'static_partition']) }}
+{{ config(materialized='incremental', unique_key=['partition_date', 'static_partition'], tags=['daily']) }}
 
 select
     partition_date,
