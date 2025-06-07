@@ -130,6 +130,7 @@ def dbt_weekly_models(
 @dg.asset(
     deps=[dg.AssetKey("mart_daily_data")],
     partitions_def=daily_partition,
+    automation_condition=dg.AutomationCondition.eager(),
 )
 def post_processing_daily(): ...
 
