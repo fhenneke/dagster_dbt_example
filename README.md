@@ -164,7 +164,8 @@ This automatically retries failed runs without per-asset configuration.
 3. **Setup environment**: `cp .env.example .env`
 4. **Start Dagster UI**: `dagster dev`
 5. **Open browser**: Navigate to `localhost:3000`
-6. **Test the pipeline**: 
+6. **Test the pipeline**:
+   - Go to Automation and activate automation
    - Go to Assets > Lineage view
    - Manually materialize the initial raw assets (`daily_raw_data`, `weekly_raw_data`)
    - Watch as the entire pipeline automatically executes downstream assets
