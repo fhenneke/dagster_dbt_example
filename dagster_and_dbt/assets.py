@@ -1,9 +1,28 @@
 from datetime import datetime
+import json
 
 import dagster as dg
 from dagster_duckdb import DuckDBResource
+from dagster_dbt import DbtCliResource, dbt_assets, DagsterDbtTranslator
 
 from dagster_and_dbt.partitions import daily_partition, weekly_partition
+from dagster_and_dbt.project import dbt_project
+
+class CustomizedDagsterDbtTranslator(DagsterDbtTranslator):
+    def get_asset_key(self, dbt_resource_props) -> dg.AssetKey:
+        resource_type = dbt_resource_props["resource_type"]
+        name = dbt_resource_props["name"]
+
+        if resource_type == "source":
+            if name == "daily_raw_data":
+                return dg.AssetKey("pre_processing_daily")
+            elif name == "weekly_raw_data":
+                return dg.AssetKey("pre_processing_weekly")
+        
+        return super().get_asset_key(dbt_resource_props)
+    
+    def get_automation_condition(self, dbt_resource_props):
+        return dg.AutomationCondition.eager()
 
 ## dagster pre-processing
 
@@ -67,23 +86,54 @@ def pre_processing_weekly(context: dg.AssetExecutionContext, database: DuckDBRes
         conn.execute(query)
 
 ## dbt
+@dbt_assets(
+    manifest=dbt_project.manifest_path,
+    select="stg_daily_raw_data mart_daily_data",
+    partitions_def=daily_partition,
+    dagster_dbt_translator=CustomizedDagsterDbtTranslator()
+)
+def dbt_daily_models(
+    context: dg.AssetExecutionContext,
+    dbt: DbtCliResource,
+):
+    time_window = context.partition_time_window
+    dbt_vars = {
+        "start_time": time_window.start.isoformat(),
+        "end_time": time_window.end.isoformat()
+    }
+    yield from dbt.cli(
+        ["build", "--vars", json.dumps(dbt_vars)], context=context
+    ).stream()
+
+@dbt_assets(
+    manifest=dbt_project.manifest_path,
+    select="stg_weekly_raw_data mart_weekly_data",
+    partitions_def=weekly_partition,
+    dagster_dbt_translator=CustomizedDagsterDbtTranslator()
+)
+def dbt_weekly_models(
+    context: dg.AssetExecutionContext,
+    dbt: DbtCliResource,
+):
+    time_window = context.partition_time_window
+    dbt_vars = {
+        "start_time": time_window.start.isoformat(),
+        "end_time": time_window.end.isoformat()
+    }
+    yield from dbt.cli(
+        ["build", "--vars", json.dumps(dbt_vars)], context=context
+    ).stream()
 
 ## dagster post-processing
 @dg.asset(
-    deps=[pre_processing_daily],
+    deps=[dg.AssetKey("mart_daily_data")],
     partitions_def=daily_partition,
 )
 def post_processing_daily():
     ...
 
 @dg.asset(
-    deps=[
-        # dg.AssetDep(
-        #     pre_processing_daily,
-        #     partition_mapping=dg.TimeWindowPartitionMapping(start_offset=-6, end_offset=0)
-        # ),
-        pre_processing_daily,
-        pre_processing_weekly],
+    deps=[dg.AssetKey("mart_weekly_data")],
     partitions_def=weekly_partition,
     automation_condition=dg.AutomationCondition.eager(),
 )
