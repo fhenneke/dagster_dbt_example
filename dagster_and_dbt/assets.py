@@ -14,22 +14,17 @@ class CustomizedDagsterDbtTranslator(DagsterDbtTranslator):
         name = dbt_resource_props["name"]
 
         if resource_type == "source":
-            if name == "daily_raw_data":
-                return dg.AssetKey("pre_processing_daily")
-            elif name == "weekly_raw_data":
-                return dg.AssetKey("pre_processing_weekly")
-        
+            return dg.AssetKey(name)
+
         return super().get_asset_key(dbt_resource_props)
-    
+
     def get_automation_condition(self, dbt_resource_props):
         return dg.AutomationCondition.eager()
 
 ## dagster pre-processing
 
-@dg.asset(
-    partitions_def=daily_partition
-)
-def pre_processing_daily(context: dg.AssetExecutionContext, database: DuckDBResource):
+@dg.asset(partitions_def=daily_partition)
+def daily_raw_data(context: dg.AssetExecutionContext, database: DuckDBResource):
     partition_key = context.partition_key
     time_partition = partition_key.keys_by_dimension["time"]
     static_partition = partition_key.keys_by_dimension["static"]
@@ -57,10 +52,8 @@ def pre_processing_daily(context: dg.AssetExecutionContext, database: DuckDBReso
     with database.get_connection() as conn:
         conn.execute(query)
 
-@dg.asset(
-    partitions_def=weekly_partition
-)
-def pre_processing_weekly(context: dg.AssetExecutionContext, database: DuckDBResource):
+@dg.asset(partitions_def=weekly_partition)
+def weekly_raw_data(context: dg.AssetExecutionContext, database: DuckDBResource):
     partition_key = context.partition_key
     time_partition = partition_key.keys_by_dimension["time"]
     static_partition = partition_key.keys_by_dimension["static"]
