@@ -1,0 +1,232 @@
+> i have a toy project in this folder. the goal is to understand dependencies between
+   assets with different partitions. the practical application i have in mind needs 
+  to materialize weekly assets based on daily results, and will later also have some 
+  part of the pipeline in dbt. for now it is just using dagster. with the current 
+  code i cannot start a materialization of post_processing_weekly and both 
+  preprocessing assets from the ui. the weekly post_processing and _one_ of the 
+  preprocessing assets works fine (probably). how can i materialize the weekly asset 
+  with all the preprocessing dependencies?
+
+> can you propose a change based on _deps_ instead of _ins_?
+
+> i made that change myself. but i get the same error on the ui: "The root assets of 
+  this selection have different partition definitions. To backfill a specific 
+  partition or partition range, select a subset of the assets."
+
+> after fixing some bugs, i get a similar error now when reloading the deployment: 
+  Error resolving selection for asset job "weekly_materialization_job": Selected 
+  assets must have the same partitions definitions, but the selected assets have 
+  different partitions definitions: 
+  Daily, starting 2025-05-01 00:00:00 UTC.: {AssetKey(['pre_processing_daily'])}
+  Weekly, starting 2025-05-01 00:00:00 UTC.: {AssetKey(['pre_processing_weekly']), 
+  AssetKey(['post_processing_weekly'])}
+
+> The UI did not work for the same reason. Please do some research and find a way to 
+  define such a job.
+
+> could you explain the approach used here: https://docs.dagster.io/guides/build/part
+  itions-and-backfills/defining-dependencies-between-partitioned-assets
+
+> i doubt this will work as it only changes the code for materialization, not any 
+  metadata accessible to dagster before a run. but the problem is with selecting 
+  things before a run
+
+> i updated the code to use automation conditions. that seems to be working. one more
+   thing i want to add (before moving to adding dbt): a 2-dimensional partition, with
+   a time partition as before and a static partition (with two dummy entries "A" and 
+  "B"). could you propose the simples change possible to add that partition to all 
+  assets?
+
+> that works great! one more question about this: can i also store the start and end 
+  time for the two assets? the partition_key only seems to contain the start time.
+
+> is it possible to obtain that info purely from context? or do i explicitly need to 
+  use the partition itself?
+
+> i like the last approach. could you propose a change?
+
+> works! now lets add a super simple dbt project. it should be as simple as possible.
+   just two incremental staging models for reading the output of the pre-processing, 
+  one (incremental) mart each which just copies stuff. the post-processing should 
+  then depend on the dbt marts.
+
+> could you make it such that dbt allows for passing in a start_time and end_time 
+  variable and these are used for restricting to a range in the incremental 
+  computation?
+
+> could you make the weekly mart depend on both the daily and weekly staging model? 
+  maybe sum values over the week from the daily model, and join on the weekly staging
+   model
+
+> are you sure it is fine to define the dbtcliresource like that? the course i just 
+  took seems to suggest something like a project.py file in dagster_and_dbt/:from 
+  pathlib import Path
+
+  from dagster_dbt import DbtProject
+
+  dbt_project = DbtProject(
+    project_dir=Path(__file__).joinpath("..", "analytics").resolve(),
+  )
+  dbt_project.prepare_if_dev()
+
+> are you sure you can define dbt assets like that? the course suggested something 
+  like: @dbt_assets(
+      manifest=dbt_project.manifest_path,
+      select="...",
+      partitions_def=daily_partition
+  )
+  def dbt_daily_models(
+      context: dg.AssetExecutionContext,
+      dbt: DbtCliResource,
+  ):
+      time_window = context.partition_time_window
+      dbt_vars = {
+          "min_date": time_window.start.strftime('%Y-%m-%d'),
+          "max_date": time_window.end.strftime('%Y-%m-%d')
+      }
+      yield from dbt.cli(
+          ["build", "--vars", json.dumps(dbt_vars)], context=context
+      ).stream()
+
+> the second asset should depends on the daily mart as well, should it not?
+
+> actually I take that back, let the final asset only depend on the weekly mart. that
+   is closer to the use case i have in mind
+
+> at the moment there is no dependency of dbt on the pre processing assets. the 
+  course i took did that by specifying sources in a special way and using:  class 
+  CustomizedDagsterDbtTranslator(DagsterDbtTranslator):
+      def get_asset_key(self, dbt_resource_props) -> dg.AssetKey:
+          resource_type = dbt_resource_props["resource_type"]
+          name = dbt_resource_props["name"]
+
+          if resource_type == "source":
+              return dg.AssetKey(f"xxx")
+          else:
+              return super().get_asset_key(dbt_resource_props)
+  to change the naming. then, if names of the sources and the asset keys coincide, 
+  dagster picks up on the dependency
+
+> are you sure the name is set correctly like that? (it might be fine, just double 
+  checking)
+
+
+> i would now have created a schedule for the pre processing. can dbt be configured 
+  in a way that it automatically starts runs when data appears? e.g. using an 
+  automation condition?
+
+> this produces an error: TypeError: dbt_assets() got an unexpected keyword argument 
+  'automation_condition'
+
+> that argument does not exist either. could you check recent documentation on that? 
+  i quickly glanced at the documentation and did not find such an option
+
+> the path for duckdb seems off: Encountered an error:
+  Runtime Error
+    IO Error: Cannot open file "/home/felix/Documents/dagster_dbt_incremental/dagster
+  _and_dbt/dbt/../../../data/data.duckdb": No such file or directory.  the course 
+  used something like this:   target: dev
+    outputs:
+      dev:
+        type: duckdb
+        path: '../../{{ env_var("DUCKDB_DATABASE", "data/data.duckdb") }}'
+
+> i get this error from the dagster ui: 
+  Errors parsed from dbt logs:
+
+  1 of 2 ERROR creating sql incremental model main.stg_daily_raw_data ............ 
+  [␛[31mERROR␛[0m in 0.05s]
+
+    Runtime Error in model stg_daily_raw_data (models/staging/stg_daily_raw_data.sql)
+    Catalog Error: Table with name daily_raw_data does not exist!
+    Did you mean "data.daily_raw_data"?
+    
+    LINE 19: from "data"."raw_data"."daily_raw_data"
+
+> i got this error when backfilling the daily table: Encountered an error:
+  Runtime Error
+    IO Error: Could not set lock on file "/home/felix/Documents/dagster_dbt_increment
+  al/dagster_and_dbt/dbt/../../data/data.duckdb": Conflicting lock is held in 
+  /home/felix/.local/share/uv/python/cpython-3.12.10-linux-x86_64-gnu/bin/python3.12 
+  (PID 1293414) by user felix. See also 
+  https://duckdb.org/docs/stable/connect/concurrency
+
+> i will like with this for now. but i observe something else which is unexpected: if
+   i materialize all the dependencies of, say, the weekly staging job, the weekly 
+  mart and post-processing are started simultaneously. how can i make sure 
+  dependencies are respected?
+
+> before you move on with the implementation: could you explain to me what you mean 
+  by creating explicit dependency chains? is that not what dependencies already do?
+
+> is there a way to configure the eager automation condition to make sure 
+  dependencies are created one after another? there is 
+  `all_deps_blockin_checks_passed()` (but i did not define any checks) and the option
+   to ignore or allow certain assets to trigger the rerun
+
+> that does not exist. is using condition = (
+      dg.AutomationCondition.eager()
+      & dg.AutomationCondition.all_deps_blocking_checks_passed()
+  ) possible?
+
+> the second one
+
+> that did not help. i suppose at the time the dependencies are checked they are not 
+  in progress. and the run of all three downstream assets runs things in parallel. 
+  maybe it is better to be more explicit about what triggers runs by specifying 
+  parent assets only, via allow()
+
+> this in only required for the final dagster mart, right? i hope dbt handles that 
+  automatically out of the box
+
+> that syntax was quite off, i used 
+  automation_condition=dg.AutomationCondition.eager().allow(
+          dg.AssetSelection.assets("mart_weekly_data")
+      ),    but that still did not result in the final asset waiting.
+
+> acutally it worked as is without modifying the eager automation condition. the 
+  assets were already materialized one after the other, I just did not notice because
+   the finished so fast.
+
+> two more things: could you make the marts incremental as well and add a 'daily' and
+   'weekly' tag to dbt models for simpler selection in assets.py?
+
+> could you restrict daily_aggregated and weekly_data on the date range (in addition 
+  or instead of restricting the final table?
+
+> where can i configure automatic retries?
+
+> i think approach 3 looks simples for now
+
+> this seems to fail. the documentation seems to suggest using a dagster.yaml with 
+  content run_retries:
+    enabled: true # Omit this key if using Dagster+, since run retries are enabled by
+   default
+    max_retries: 3
+
+> could you add a README.md with the general layout of the code, design choices, and 
+  subsections for some of the more obscure thinks like, e.g., the dagster dbt 
+  translator, automation condition, splitting of dbt assets, ...?
+
+> lets add some final touches: the initial daily asset should be run on a daily 
+  schedule (at 1 am.), the initial weekly asset should run on a weekly schedule, (at 
+  1 am on Tuesdays).
+
+> could you update the readme: i deleted the jobs file; incremental models subsection
+   should be mentioned earlier?, focussing on passing start and end time of 
+  respective partition; it should be mentioned earlier that only the initial assets 
+  follow a cron schedule, all other assets are materialized as soon as all 
+  dependencies are met and if a dependency is updated; instead of tagging dbt models 
+  mention that dbt models are spilt into daily and weekly models, _with_ cross 
+  partition dependencies; regarding duckdb, mention that this is just the simplest 
+  choice to add a database, it has no impact on what this repo is supposed to show; 
+  add instruction on how to test this from a fresh repo: use `uv sync`, `dagster 
+  dev`, go to ui (localhost:3000), materialize initial raw assets from assets 
+  lineage, see how automatically the rest of the pipeline is executed;
+
+> one minor modification regarding the environment variable: users should copy .env.example to .env 
+  instead of setting anything on the command line
+
+> the file does exist. or am i looking at a wrong folder here?
+
+> it should be fine now, i modified it myself

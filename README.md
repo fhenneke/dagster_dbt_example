@@ -188,3 +188,7 @@ All other assets automatically materialize when their dependencies are updated.
 - **Automation conditions** for intelligent triggering
 
 This setup provides a solid foundation for production data pipelines requiring incremental processing, complex dependencies, and mixed tool orchestration.
+
+## Promts for Claude Code
+
+This repository was partially created using Claude Code. The prompts used can be found in `prompts.txt`.
