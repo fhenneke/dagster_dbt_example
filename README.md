@@ -5,10 +5,23 @@ This project demonstrates a complete data pipeline using Dagster and dbt with in
 ## Overview
 
 The pipeline simulates a real-world scenario where:
-- Daily raw data is processed and aggregated into weekly summaries
-- dbt handles incremental transformations using time-based variables
-- Dagster orchestrates the entire workflow with automatic triggering
+- Only initial assets run on cron schedules (daily at 1 AM, weekly on Tuesdays at 1 AM)
+- All downstream assets automatically materialize when dependencies are updated
+- dbt handles incremental transformations using partition start/end times as variables
+- Cross-partition dependencies allow weekly models to depend on daily data
 - 2-dimensional partitioning handles both time windows and static categories
+
+## Incremental Processing with Partition Variables
+
+All dbt models use incremental materialization with partition-specific time ranges:
+```sql
+{% if is_incremental() %}
+    where start_time >= '{{ var("start_time") }}' 
+    and start_time < '{{ var("end_time") }}'
+{% endif %}
+```
+
+Dagster passes the exact start and end time of each partition to dbt, ensuring only relevant data is processed incrementally.
 
 ## Project Structure
 
@@ -20,7 +33,6 @@ dagster_and_dbt/
 ├── partitions.py          # Partition definitions
 ├── resources.py           # Resource configurations
 ├── project.py             # dbt project setup
-├── jobs.py                # Job definitions (legacy)
 └── dbt/                   # dbt project
     ├── dbt_project.yml
     ├── profiles.yml
@@ -74,17 +86,6 @@ This allows for granular control over data processing while maintaining flexibil
 
 The weekly post-processing asset depends on daily mart data using automation conditions rather than explicit `AssetDep` mappings. This avoids complexity while maintaining proper execution order.
 
-### Incremental Processing with Variables
-
-All dbt models use incremental materialization with time-range variables:
-```sql
-{% if is_incremental() %}
-    where start_time >= '{{ var("start_time") }}' 
-    and start_time < '{{ var("end_time") }}'
-{% endif %}
-```
-
-This ensures efficient processing of only new/changed data.
 
 ## Advanced Concepts
 
@@ -124,25 +125,20 @@ This ensures:
 - But not in the latest time window (avoids incomplete data)
 - Only when all dependency checks pass
 
-### Split dbt Assets by Tags
+### Split dbt Assets into Daily and Weekly Models
 
-Instead of listing individual models, the project uses dbt tags for cleaner organization:
+dbt models are split into separate daily and weekly assets with cross-partition dependencies:
 
 ```python
 @dbt_assets(select="tag:daily", partitions_def=daily_partition)
 @dbt_assets(select="tag:weekly", partitions_def=weekly_partition)
 ```
 
-Models are tagged in their configuration:
-```sql
-{{ config(materialized='incremental', tags=['daily']) }}
-```
-
-This approach scales better as more models are added - just tag them appropriately.
+The weekly mart model depends on daily staging data, demonstrating how dbt can handle cross-partition dependencies within its execution context while Dagster manages the overall orchestration.
 
 ### DuckDB Configuration
 
-The project uses environment variables for database configuration:
+The project uses DuckDB as the simplest choice for adding a database component - this has no impact on the core concepts being demonstrated. Configuration uses environment variables:
 - Dagster uses `DUCKDB_DATABASE` env var
 - dbt uses the same variable via `{{ env_var("DUCKDB_DATABASE", "data/data.duckdb") }}`
 
@@ -159,11 +155,28 @@ run_retries:
 
 This automatically retries failed runs without per-asset configuration.
 
-## Running the Pipeline
+## Getting Started
 
-1. Set environment variable: `export DUCKDB_DATABASE=data/data.duckdb`
-2. Start Dagster UI: `dagster dev`
-3. Materialize assets through the UI or let automation conditions trigger them
+### Quick Setup and Testing
+
+1. **Install dependencies**: `uv sync`
+2. **Activate environment**: `source .venv/bin/activate`
+3. **Setup environment**: `cp .env.example .env`
+4. **Start Dagster UI**: `dagster dev`
+5. **Open browser**: Navigate to `localhost:3000`
+6. **Test the pipeline**: 
+   - Go to Assets > Lineage view
+   - Manually materialize the initial raw assets (`daily_raw_data`, `weekly_raw_data`)
+   - Watch as the entire pipeline automatically executes downstream assets
+   - Observe how dbt models and post-processing assets trigger automatically
+
+### Production Usage
+
+In production, only the initial assets need scheduling - they run on cron schedules:
+- `daily_raw_data`: Daily at 1 AM
+- `weekly_raw_data`: Tuesdays at 1 AM
+
+All other assets automatically materialize when their dependencies are updated.
 
 ## Common Patterns Demonstrated
 
@@ -171,8 +184,6 @@ This automatically retries failed runs without per-asset configuration.
 - **Cross-partition dependencies** between daily and weekly assets
 - **Mixed orchestration** with both Dagster and dbt
 - **Automatic dependency detection** via dbt sources and translator
-- **Tag-based model organization** for scalability
-- **Environment-based configuration** for flexibility
 - **Automation conditions** for intelligent triggering
 
 This setup provides a solid foundation for production data pipelines requiring incremental processing, complex dependencies, and mixed tool orchestration.
