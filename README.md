@@ -69,8 +69,8 @@ Dagster Post-Processing
    - `mart_weekly_data`: Aggregates daily data by week + joins weekly data
 
 4. **Post-processing (Dagster)**:
-   - `post_processing_daily`: Processes daily mart output
-   - `post_processing_weekly`: Processes weekly mart output
+   - `external_daily_data`: Exports daily mart data to external systems
+   - `external_weekly_data`: Exports weekly mart data to external systems
 
 ## Key Design Choices
 
@@ -84,7 +84,7 @@ This allows for granular control over data processing while maintaining flexibil
 
 ### Cross-Partition Dependencies
 
-The weekly post-processing asset depends on daily mart data using automation conditions rather than explicit `AssetDep` mappings. This avoids complexity while maintaining proper execution order.
+The weekly mart model depends on daily staging data, and weekly export assets depend on weekly mart data. This demonstrates how dbt can handle cross-partition dependencies within its execution context while Dagster manages the overall orchestration through automation conditions.
 
 
 ## Advanced Concepts
@@ -169,7 +169,7 @@ This automatically retries failed runs without per-asset configuration.
    - Go to Assets > Lineage view
    - Manually materialize the initial raw assets (`daily_raw_data`, `weekly_raw_data`)
    - Watch as the entire pipeline automatically executes downstream assets
-   - Observe how dbt models and post-processing assets trigger automatically
+   - Observe how dbt models and external export assets trigger automatically
 
 ### Production Usage
 

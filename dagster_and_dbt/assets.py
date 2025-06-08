@@ -145,7 +145,41 @@ def dbt_weekly_models(
     partitions_def=daily_partition,
     automation_condition=condition,
 )
-def post_processing_daily(): ...
+def external_daily_data(context: dg.AssetExecutionContext, database: DuckDBResource):
+    partition_key = context.partition_key
+    time_partition = partition_key.keys_by_dimension["time"]
+    static_partition = partition_key.keys_by_dimension["static"]
+
+    context.log.info(
+        f"Exporting daily data for time_partition: {time_partition}, static_partition: {static_partition}"
+    )
+
+    query = f"""
+        CREATE TABLE IF NOT EXISTS external_daily_data (
+            partition_date VARCHAR, 
+            static_partition VARCHAR, 
+            export_time VARCHAR,
+            total_value INTEGER,
+            record_count INTEGER
+        );
+
+        DELETE FROM external_daily_data 
+        WHERE partition_date = '{time_partition}' AND static_partition = '{static_partition}';
+    
+        INSERT INTO external_daily_data
+        SELECT 
+            '{time_partition}' as partition_date,
+            '{static_partition}' as static_partition,
+            '{context.partition_time_window.start.isoformat()}' as export_time,
+            COALESCE(SUM(value), 0) as total_value,
+            COUNT(*) as record_count
+        FROM mart_daily_data
+        WHERE partition_date = '{time_partition}' AND static_partition = '{static_partition}';
+    """
+
+    context.log.info(f"Export query:\n{query}")
+    with database.get_connection() as conn:
+        conn.execute(query)
 
 
 @dg.asset(
@@ -153,4 +187,38 @@ def post_processing_daily(): ...
     partitions_def=weekly_partition,
     automation_condition=condition,
 )
-def post_processing_weekly(): ...
+def external_weekly_data(context: dg.AssetExecutionContext, database: DuckDBResource):
+    partition_key = context.partition_key
+    time_partition = partition_key.keys_by_dimension["time"]
+    static_partition = partition_key.keys_by_dimension["static"]
+
+    context.log.info(
+        f"Exporting weekly data for time_partition: {time_partition}, static_partition: {static_partition}"
+    )
+
+    query = f"""
+        CREATE TABLE IF NOT EXISTS external_weekly_data (
+            partition_date VARCHAR, 
+            static_partition VARCHAR, 
+            export_time VARCHAR,
+            total_value INTEGER,
+            record_count INTEGER
+        );
+
+        DELETE FROM external_weekly_data 
+        WHERE partition_date = '{time_partition}' AND static_partition = '{static_partition}';
+    
+        INSERT INTO external_weekly_data
+        SELECT 
+            '{time_partition}' as partition_date,
+            '{static_partition}' as static_partition,
+            '{context.partition_time_window.start.isoformat()}' as export_time,
+            COALESCE(SUM(value), 0) as total_value,
+            COUNT(*) as record_count
+        FROM mart_weekly_data
+        WHERE partition_date = '{time_partition}' AND static_partition = '{static_partition}';
+    """
+
+    context.log.info(f"Export query:\n{query}")
+    with database.get_connection() as conn:
+        conn.execute(query)
