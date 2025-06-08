@@ -159,7 +159,7 @@ def external_daily_data(context: dg.AssetExecutionContext, database: DuckDBResou
             partition_date VARCHAR, 
             static_partition VARCHAR, 
             export_time VARCHAR,
-            total_value INTEGER,
+            total_value BIGINT,
             record_count INTEGER
         );
 
@@ -201,7 +201,7 @@ def external_weekly_data(context: dg.AssetExecutionContext, database: DuckDBReso
             partition_date VARCHAR, 
             static_partition VARCHAR, 
             export_time VARCHAR,
-            total_value INTEGER,
+            total_value BIGINT,
             record_count INTEGER
         );
 
@@ -213,7 +213,7 @@ def external_weekly_data(context: dg.AssetExecutionContext, database: DuckDBReso
             '{time_partition}' as partition_date,
             '{static_partition}' as static_partition,
             '{context.partition_time_window.start.isoformat()}' as export_time,
-            COALESCE(SUM(value), 0) as total_value,
+            COALESCE(SUM(weekly_value + daily_sum), 0) as total_value,
             COUNT(*) as record_count
         FROM mart_weekly_data
         WHERE partition_date = '{time_partition}' AND static_partition = '{static_partition}';

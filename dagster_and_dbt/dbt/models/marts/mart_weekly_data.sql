@@ -3,14 +3,17 @@
 with daily_aggregated as (
     select
         static_partition,
-        date_trunc('week', start_time::timestamp) as week_start,
+        -- Calculate Tuesday-based week start: find the Tuesday at or before each date
+        -- EXTRACT(dow) returns: Sunday=0, Monday=1, Tuesday=2, Wednesday=3, etc.
+        -- We want to subtract days to get to the previous Tuesday (or same day if Tuesday)
+        (start_time::timestamp::date - INTERVAL '1 day' * ((EXTRACT(dow FROM start_time::timestamp) + 5) % 7))::timestamp as week_start,
         sum(value) as daily_sum
     from {{ ref('stg_daily_raw_data') }}
     {% if is_incremental() %}
     where start_time >= '{{ var("start_time") }}' 
     and start_time < '{{ var("end_time") }}'
     {% endif %}
-    group by static_partition, date_trunc('week', start_time::timestamp)
+    group by 1, 2
 ),
 
 weekly_data as (
