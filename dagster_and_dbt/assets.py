@@ -35,7 +35,7 @@ class CustomizedDagsterDbtTranslator(DagsterDbtTranslator):
 
 @dg.asset(
     partitions_def=daily_partition,
-    automation_condition=dg.AutomationCondition.cron_tick_passed("0 1 * * *")
+    automation_condition=dg.AutomationCondition.cron_tick_passed("0 1 * * *"),
 )
 def daily_raw_data(context: dg.AssetExecutionContext, database: DuckDBResource):
     partition_key = context.partition_key
@@ -70,7 +70,7 @@ def daily_raw_data(context: dg.AssetExecutionContext, database: DuckDBResource):
 
 @dg.asset(
     partitions_def=weekly_partition,
-    automation_condition=dg.AutomationCondition.cron_tick_passed("0 1 * * 2")
+    automation_condition=dg.AutomationCondition.cron_tick_passed("0 1 * * 2"),
 )
 def weekly_raw_data(context: dg.AssetExecutionContext, database: DuckDBResource):
     partition_key = context.partition_key
