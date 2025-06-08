@@ -150,11 +150,11 @@ def test_materialize_full_weekly_pipeline_with_real_dbt(test_resources, duckdb_e
 
         # Calculate expected daily sum from the three daily records created
         # We created daily data for 2025-05-06, 2025-05-07, 2025-05-08 (all partition B)
-        # Values are timestamps: 1746482400, 1746568800, 1746655200
-        expected_daily_sum = 1746482400 + 1746568800 + 1746655200  # = 5239706400
+        # Values are UTC timestamps: 1746489600, 1746576000, 1746662400
+        expected_daily_sum = 1746489600 + 1746576000 + 1746662400  # = 5239728000
         expected_export = (
             weekly_value + daily_sum
-        )  # = 1746482400 + 5239706400 = 6986188800
+        )  # = 1746489600 + 5239728000 = 6986217600
 
         # Verify the data flow
         assert weekly_value == raw_value, (
