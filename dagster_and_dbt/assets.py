@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 import dagster as dg
@@ -60,7 +60,7 @@ def daily_raw_data(context: dg.AssetExecutionContext, database: DuckDBResource):
     
         insert into daily_raw_data
         select
-            '{time_partition}', '{static_partition}', '{start_time}', '{end_time}', {datetime.fromisoformat(time_partition).timestamp()};
+            '{time_partition}', '{static_partition}', '{start_time}', '{end_time}', {datetime.fromisoformat(time_partition).replace(tzinfo=timezone.utc).timestamp()};
     """
 
     context.log.info(f"query:\n{query}")
@@ -90,7 +90,7 @@ def weekly_raw_data(context: dg.AssetExecutionContext, database: DuckDBResource)
     
         insert into weekly_raw_data
         select
-            '{time_partition}', '{static_partition}', '{start_time}', '{end_time}', {datetime.fromisoformat(time_partition).timestamp()};
+            '{time_partition}', '{static_partition}', '{start_time}', '{end_time}', {datetime.fromisoformat(time_partition).replace(tzinfo=timezone.utc).timestamp()};
     """
 
     context.log.info(f"query:\n{query}")
